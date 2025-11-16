@@ -1,0 +1,26 @@
+INFO:     Will watch for changes in these directories: ['/home/workspace']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [152] using StatReload
+INFO:     Started server process [154]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     172.20.0.1:50946 - "HEAD / HTTP/1.1" 405 Method Not Allowed
+INFO:     172.20.0.1:50950 - "GET /coachings HTTP/1.1" 200 OK
+INFO:     172.20.0.1:50962 - "GET /coachings HTTP/1.1" 200 OK
+INFO:     172.20.0.1:43418 - "GET /coachings HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57192 - "GET /coachings HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57192 - "GET /coachings?exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57192 - "GET /coachings?city=G&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57192 - "GET /coachings?city=Gu&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57192 - "GET /coachings?city=Gur&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57202 - "GET /coachings?city=Guru&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57192 - "GET /coachings?city=Gurug&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57202 - "GET /coachings?city=Gurugr&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57214 - "GET /coachings?city=Gurugra&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:57192 - "GET /coachings?city=Gurugram&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:40904 - "GET /coachings?city=Gurugram&exams=IIT+JEE%2CNEET HTTP/1.1" 200 OK
+INFO:     172.20.0.1:40904 - "GET /coachings?city=Gurugram&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:40904 - "GET /coachings?city=Gurugram&exams=IIT+JEE&status=liked HTTP/1.1" 200 OK
+INFO:     172.20.0.1:40904 - "GET /coachings?city=Gurugram&exams=IIT+JEE HTTP/1.1" 200 OK
+INFO:     172.20.0.1:40904 - "GET /coachings?city=Gurugram HTTP/1.1" 200 OK
+INFO:     172.20.0.1:40904 - "GET /coachings?city=Gurugram&exams=IIT+JEE HTTP/1.1" 200 OK

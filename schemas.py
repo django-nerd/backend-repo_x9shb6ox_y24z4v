@@ -12,37 +12,44 @@ Model name is converted to lowercase for the collection name:
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
-# Example schemas (replace with your own):
+# Coaching lead management schemas
 
-class User(BaseModel):
+EXAM_CHOICES = [
+    "IIT JEE", "NEET", "UPSC", "SSC", "CAT", "CLAT", "GATE", "BANKING", "RAILWAYS", "FOUNDATION"
+]
+
+class Location(BaseModel):
+    lat: Optional[float] = Field(None, description="Latitude")
+    lng: Optional[float] = Field(None, description="Longitude")
+
+class Coaching(BaseModel):
     """
-    Users collection schema
-    Collection name: "user" (lowercase of class name)
+    Coaching listings
+    Collection name: "coaching"
     """
-    name: str = Field(..., description="Full name")
-    email: str = Field(..., description="Email address")
-    address: str = Field(..., description="Address")
-    age: Optional[int] = Field(None, ge=0, le=120, description="Age in years")
-    is_active: bool = Field(True, description="Whether user is active")
+    name: str = Field(..., description="Coaching institute name")
+    city: str = Field(..., description="City name (e.g., Jaipur, Delhi)")
+    exams: List[str] = Field(default_factory=list, description="Exams covered e.g. IIT JEE, NEET")
+    size: Optional[int] = Field(None, ge=0, description="Estimated student count or capacity")
+    address: Optional[str] = Field(None, description="Full street address")
+    phone: Optional[str] = Field(None, description="Primary phone number")
+    website: Optional[str] = Field(None, description="Website URL")
+    google_maps_url: Optional[str] = Field(None, description="Google Maps listing URL")
+    images: List[str] = Field(default_factory=list, description="Image URLs")
+    location: Optional[Location] = None
+    description: Optional[str] = Field(None, description="Short description or highlights")
+    status: str = Field("neutral", description="Lead disposition: neutral|liked|disliked")
 
-class Product(BaseModel):
+class Note(BaseModel):
     """
-    Products collection schema
-    Collection name: "product" (lowercase of class name)
+    Notes for a coaching lead (meetings, follow-ups, actions)
+    Collection name: "note"
     """
-    title: str = Field(..., description="Product title")
-    description: Optional[str] = Field(None, description="Product description")
-    price: float = Field(..., ge=0, description="Price in dollars")
-    category: str = Field(..., description="Product category")
-    in_stock: bool = Field(True, description="Whether product is in stock")
-
-# Add your own schemas here:
-# --------------------------------------------------
-
-# Note: The Flames database viewer will automatically:
-# 1. Read these schemas from GET /schema endpoint
-# 2. Use them for document validation when creating/editing
-# 3. Handle all database operations (CRUD) directly
-# 4. You don't need to create any database endpoints!
+    coaching_id: str = Field(..., description="Related coaching document ID")
+    title: Optional[str] = Field(None, description="Short title e.g. First Meet")
+    content: Optional[str] = Field(None, description="What happened / key details")
+    stage: Optional[str] = Field(None, description="first_meet | second_meet | followup | other")
+    next_action: Optional[str] = Field(None, description="What to do next")
+    next_action_date: Optional[str] = Field(None, description="YYYY-MM-DD or natural text")

@@ -1,6 +1,12 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
+from bson import ObjectId
+
+from database import db, create_document, get_documents
+from schemas import Coaching, Note
 
 app = FastAPI()
 
@@ -14,15 +20,10 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {"message": "Hello from FastAPI Backend!"}
-
-@app.get("/api/hello")
-def hello():
-    return {"message": "Hello from the backend API!"}
+    return {"message": "Coaching Leads API"}
 
 @app.get("/test")
 def test_database():
-    """Test endpoint to check if database is available and accessible"""
     response = {
         "backend": "✅ Running",
         "database": "❌ Not Available",
@@ -31,39 +32,150 @@ def test_database():
         "connection_status": "Not Connected",
         "collections": []
     }
-    
     try:
-        # Try to import database module
-        from database import db
-        
         if db is not None:
             response["database"] = "✅ Available"
-            response["database_url"] = "✅ Configured"
+            response["database_url"] = "✅ Set" if os.getenv("DATABASE_URL") else "❌ Not Set"
             response["database_name"] = db.name if hasattr(db, 'name') else "✅ Connected"
             response["connection_status"] = "Connected"
-            
-            # Try to list collections to verify connectivity
             try:
                 collections = db.list_collection_names()
-                response["collections"] = collections[:10]  # Show first 10 collections
+                response["collections"] = collections[:10]
                 response["database"] = "✅ Connected & Working"
             except Exception as e:
                 response["database"] = f"⚠️  Connected but Error: {str(e)[:50]}"
         else:
             response["database"] = "⚠️  Available but not initialized"
-            
-    except ImportError:
-        response["database"] = "❌ Database module not found (run enable-database first)"
     except Exception as e:
         response["database"] = f"❌ Error: {str(e)[:50]}"
-    
-    # Check environment variables
-    import os
-    response["database_url"] = "✅ Set" if os.getenv("DATABASE_URL") else "❌ Not Set"
-    response["database_name"] = "✅ Set" if os.getenv("DATABASE_NAME") else "❌ Not Set"
-    
     return response
 
+# Helpers
+class CoachingFilter(BaseModel):
+    city: Optional[str] = None
+    exams: Optional[List[str]] = None
+    min_size: Optional[int] = None
+    max_size: Optional[int] = None
+    status: Optional[str] = None  # liked, disliked, neutral
+
+
+def to_object_id(id_str: str) -> ObjectId:
+    try:
+        return ObjectId(id_str)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ID")
+
+
+# Coaching Endpoints
+@app.post("/coaching", response_model=dict)
+async def create_coaching(item: Coaching):
+    inserted_id = create_document("coaching", item)
+    return {"id": inserted_id}
+
+@app.get("/coachings")
+async def list_coachings(city: Optional[str] = None, exams: Optional[str] = None, min_size: Optional[int] = None, max_size: Optional[int] = None, status: Optional[str] = None, q: Optional[str] = None):
+    filt = {}
+    if city:
+        filt["city"] = {"$regex": f"^{city}$", "$options": "i"}
+    if status:
+        filt["status"] = status
+    if exams:
+        # exams comma-separated
+        exams_list = [e.strip() for e in exams.split(',') if e.strip()]
+        if exams_list:
+            filt["exams"] = {"$all": exams_list}
+    if min_size is not None or max_size is not None:
+        range_cond = {}
+        if min_size is not None:
+            range_cond["$gte"] = min_size
+        if max_size is not None:
+            range_cond["$lte"] = max_size
+        filt["size"] = range_cond
+    if q:
+        filt["$or"] = [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"address": {"$regex": q, "$options": "i"}},
+            {"city": {"$regex": q, "$options": "i"}},
+        ]
+
+    docs = get_documents("coaching", filt)
+    # Convert ObjectId
+    for d in docs:
+        d["id"] = str(d.pop("_id"))
+    return {"items": docs}
+
+@app.get("/coaching/{coaching_id}")
+async def get_coaching(coaching_id: str):
+    oid = to_object_id(coaching_id)
+    doc = db["coaching"].find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not found")
+    doc["id"] = str(doc.pop("_id"))
+    return doc
+
+class UpdateStatus(BaseModel):
+    status: str
+
+@app.post("/coaching/{coaching_id}/status")
+async def update_status(coaching_id: str, payload: UpdateStatus):
+    if payload.status not in ["liked", "disliked", "neutral"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    oid = to_object_id(coaching_id)
+    db["coaching"].update_one({"_id": oid}, {"$set": {"status": payload.status}})
+    return {"ok": True}
+
+# Notes Endpoints
+@app.post("/coaching/{coaching_id}/notes")
+async def add_note(coaching_id: str, payload: Note):
+    if payload.coaching_id != coaching_id:
+        # ensure consistency
+        payload.coaching_id = coaching_id
+    note_id = create_document("note", payload)
+    return {"id": note_id}
+
+@app.get("/coaching/{coaching_id}/notes")
+async def list_notes(coaching_id: str):
+    docs = get_documents("note", {"coaching_id": coaching_id})
+    for d in docs:
+        d["id"] = str(d.pop("_id"))
+    # sort by created_at desc if present
+    docs.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+    return {"items": docs}
+
+# Simple AI agent stub (will call external API via requests if API key present)
+class AgentQuery(BaseModel):
+    query: str
+
+@app.post("/coaching/{coaching_id}/agent")
+async def coaching_agent(coaching_id: str, payload: AgentQuery):
+    # Basic stub: echo + suggest actions based on fields
+    coaching = db["coaching"].find_one({"_id": to_object_id(coaching_id)})
+    if not coaching:
+        raise HTTPException(status_code=404, detail="Coaching not found")
+    name = coaching.get("name", "this coaching")
+    city = coaching.get("city", "the city")
+    exams = ", ".join(coaching.get("exams", [])[:5]) or "multiple exams"
+    suggestions = [
+        f"Research recent reviews of {name} on Google and Reddit.",
+        f"Check LinkedIn for alumni or staff from {name} in {city}.",
+        f"Look for photo galleries and infrastructure details if targeting {exams}.",
+        "Draft an email introducing your services with 2-3 tailored benefits.",
+        "Schedule a follow-up reminder in 3 days if no response.",
+    ]
+    response = {
+        "answer": f"You asked: '{payload.query}'. For {name} in {city}, consider: ",
+        "suggestions": suggestions
+    }
+    return response
+
+# Schema exposure for UI builders
+@app.get("/schema")
+async def get_schema_info():
+    return {
+        "collections": [
+            "coaching", "note"
+        ]
+    }
 
 if __name__ == "__main__":
     import uvicorn
