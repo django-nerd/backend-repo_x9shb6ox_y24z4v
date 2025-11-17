@@ -12,7 +12,7 @@ from schemas import Coaching, Note
 # For basic crawling
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urlparse, parse_qs, unquote
 
 app = FastAPI()
 
@@ -181,37 +181,68 @@ class CrawlRequest(BaseModel):
     limit: int = 20
 
 
+def _normalize_ddg_link(href: str) -> Optional[str]:
+    """DuckDuckGo sometimes wraps results like /l/?kh=-1&uddg=<url>. Extract the real URL."""
+    if not href:
+        return None
+    if href.startswith("http"):
+        return href
+    # unwrap redirect links
+    if href.startswith("/l/?"):
+        try:
+            qs = parse_qs(href.split("?", 1)[1])
+            if "uddg" in qs and qs["uddg"]:
+                return unquote(qs["uddg"][0])
+        except Exception:
+            return None
+    return None
+
+
 def _ddg_search_urls(query: str, limit: int = 20) -> List[str]:
-    # DuckDuckGo HTML endpoint
-    url = f"https://duckduckgo.com/html/?q={quote_plus(query)}"
-    try:
-        r = requests.get(url, timeout=12, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36"
-        })
-        r.raise_for_status()
-    except Exception:
-        return []
-    soup = BeautifulSoup(r.text, 'html.parser')
-    links = []
-    for a in soup.select('a.result__a'):
-        href = a.get('href')
-        if href and href.startswith('http'):
-            links.append(href)
-        if len(links) >= limit:
-            break
-    # Fallback selector
-    if not links:
-        for a in soup.find_all('a'):
-            href = a.get('href')
+    # Try both HTML and Lite endpoints for better compatibility
+    endpoints = [
+        f"https://duckduckgo.com/html/?q={quote_plus(query)}",
+        f"https://lite.duckduckgo.com/lite/?q={quote_plus(query)}",
+    ]
+    links: List[str] = []
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36"
+    }
+    for url in endpoints:
+        try:
+            r = requests.get(url, timeout=12, headers=headers)
+            r.raise_for_status()
+        except Exception:
+            continue
+        soup = BeautifulSoup(r.text, 'html.parser')
+
+        # HTML endpoint typical selector
+        for a in soup.select('a.result__a'):
+            href = _normalize_ddg_link(a.get('href')) or a.get('href')
             if href and href.startswith('http'):
                 links.append(href)
-            if len(links) >= limit:
-                break
-    # Deduplicate same domains
+                if len(links) >= limit:
+                    break
+        if len(links) < limit:
+            # Other possible anchors
+            for a in soup.find_all('a'):
+                href_raw = a.get('href')
+                href = _normalize_ddg_link(href_raw) or href_raw
+                if href and href.startswith('http') and 'duckduckgo.com' not in urlparse(href).netloc:
+                    links.append(href)
+                    if len(links) >= limit:
+                        break
+        if len(links) >= limit:
+            break
+
+    # Deduplicate by domain
     seen = set()
     uniq = []
     for l in links:
-        dom = urlparse(l).netloc
+        try:
+            dom = urlparse(l).netloc
+        except Exception:
+            continue
         if dom not in seen:
             seen.add(dom)
             uniq.append(l)
